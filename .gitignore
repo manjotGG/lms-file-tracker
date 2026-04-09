@@ -23,3 +23,14 @@ uploads/
 
 # Logs
 *.log
+
+# CAS Storage
+cas_storage/
+
+# Environment
+.env
+
+# Alembic
+alembic/versions/
+
+workplan.json
