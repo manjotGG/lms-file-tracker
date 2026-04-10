@@ -1,16 +1,20 @@
+from fastapi import APIRouter, UploadFile, File, Depends, Query, HTTPException, status, Header
 from fastapi.responses import FileResponse
-from fastapi import Form, Query
-from fastapi import APIRouter, UploadFile, File, Depends
 import shutil
 import os
 from sqlalchemy.orm import Session
 from database import SessionLocal
 import models
 from collections import defaultdict
+from jose import JWTError, jwt
+from dotenv import load_dotenv
+
+load_dotenv()
 
 router = APIRouter()
 
 UPLOAD_DIR = "uploads"
+JWT_SECRET = os.getenv("JWT_SECRET", "supersecretkey")
 
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
@@ -24,28 +28,76 @@ def get_db():
         db.close()
 
 
-@router.post("/upload/")
+def verify_token(token: str):
+    """Verify JWT token"""
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        return payload
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+
+def get_auth_header(authorization: str = Header(None)):
+    """Extract and verify authorization header"""
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization header required"
+        )
+    
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication scheme"
+            )
+        return verify_token(token)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format"
+        )
+
+
+# Student endpoints
+@router.post("/upload")
 def upload_file(
-    student_name: str = Form(...),   
-    student_urn: str = Form(...),
     file: UploadFile = File(...),
-    comment: str = Form(...),
+    comment: str = Query(""),
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Upload a file with automatic versioning"""
-    student_name = student_name.strip().lower() 
+    """Upload file - Student only"""
+    user = get_auth_header(authorization)
     
+    if user["role"] != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can upload files"
+        )
+    
+    student_name = user["student_name"]
+    student_urn = user["student_urn"]
+    
+    # Get next version number
     existing = db.query(models.File).filter(
         models.File.filename == file.filename,
         models.File.student_urn == student_urn
     ).all()
     version = len(existing) + 1
 
+    # Create file path
     file_path = f"{UPLOAD_DIR}/{student_urn}_{file.filename}_v{version}"
 
+    # Save file
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    # Record in database
     new_file = models.File(
         filename=file.filename,
         version=version,
@@ -60,95 +112,246 @@ def upload_file(
     db.refresh(new_file)
 
     return {
+        "success": True,
         "filename": file.filename,
         "version": version,
-        "student_name": student_name,
         "student_urn": student_urn,
-        "comment": comment
+        "comment": comment,
+        "uploaded_at": new_file.uploaded_at
     }
 
 
-@router.get("/search/")
-def search_student(
-    student_name: str = Query(None),
-    student_urn: str = Query(None),
+@router.get("/my")
+def get_my_files(
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Search student by name OR URN"""
-    if not student_name and not student_urn:
-        return {"error": "Provide student_name or student_urn"}
+    """Get all files for current student"""
+    user = get_auth_header(authorization)
     
-    query = db.query(models.File)
+    if user["role"] != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint"
+        )
     
-    if student_name:
-        student_name = student_name.strip().lower()
-        query = query.filter(models.File.student_name == student_name)
+    student_urn = user["student_urn"]
     
-    if student_urn:
-        query = query.filter(models.File.student_urn == student_urn)
-    
-    files = query.all()
-    
-    if not files:
-        return {"error": "No files found"}
-    
-    student = files[0]
-    files_dict = defaultdict(list)
-    for f in files:
-        files_dict[f.filename].append(f.version)
-    
-    for filename in files_dict:
-        files_dict[filename].sort()
-    
-    return {
-        "student_name": student.student_name,
-        "student_urn": student.student_urn,
-        "files": [{"filename": fn, "versions": v} for fn, v in files_dict.items()]
-    }
-
-
-@router.get("/student/files/")
-def get_student_all_files(
-    student_name: str = Query(None),
-    student_urn: str = Query(None),
-    db: Session = Depends(get_db)
-):
-    """Get all files for a student (by name OR URN)"""
-    if not student_name and not student_urn:
-        return {"error": "Provide student_name or student_urn"}
-    
-    query = db.query(models.File)
-    
-    if student_name:
-        student_name = student_name.strip().lower()
-        query = query.filter(models.File.student_name == student_name)
-    
-    if student_urn:
-        query = query.filter(models.File.student_urn == student_urn)
-    
-    files = query.all()
+    files = db.query(models.File).filter(
+        models.File.student_urn == student_urn
+    ).all()
     
     if not files:
-        return {"error": "No files found"}
+        return {
+            "student_urn": student_urn,
+            "files": []
+        }
     
-    student = files[0]
+    # Group by filename
     files_dict = defaultdict(list)
     for f in files:
         files_dict[f.filename].append({
+            "id": f.id,
             "version": f.version,
             "comment": f.comment,
-            "uploaded_at": f.uploaded_at,
-            "id": f.id
+            "uploaded_at": f.uploaded_at.isoformat() if f.uploaded_at else None
         })
     
+    # Sort versions
     for filename in files_dict:
-        files_dict[filename].sort(key=lambda x: x["version"])
+        files_dict[filename].sort(key=lambda x: x["version"], reverse=True)
+    
+    return {
+        "student_urn": student_urn,
+        "files": [{"filename": fn, "versions": v} for fn, v in files_dict.items()]
+    }
+
+
+@router.get("/my/latest")
+def download_my_latest(
+    filename: str = Query(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Download latest version of student's file"""
+    user = get_auth_header(authorization)
+    
+    if user["role"] != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can download their files"
+        )
+    
+    student_urn = user["student_urn"]
+    
+    # Get latest file
+    file_record = db.query(models.File).filter(
+        models.File.filename == filename,
+        models.File.student_urn == student_urn
+    ).order_by(models.File.version.desc()).first()
+    
+    if not file_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+    
+    if not os.path.exists(file_record.filepath):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on disk"
+        )
+    
+    return FileResponse(
+        path=file_record.filepath,
+        filename=f"{filename}_v{file_record.version}"
+    )
+
+
+# Admin endpoints
+@router.get("/admin/search")
+def admin_search(
+    student_name: str = Query(None),
+    student_urn: str = Query(None),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Admin search for students"""
+    user = get_auth_header(authorization)
+    
+    if user["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can search"
+        )
+    
+    if not student_name and not student_urn:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide student_name or student_urn"
+        )
+    
+    query = db.query(models.File)
+    
+    if student_name:
+        student_name = student_name.strip().lower()
+        query = query.filter(models.File.student_name == student_name)
+    
+    if student_urn:
+        query = query.filter(models.File.student_urn == student_urn)
+    
+    files = query.all()
+    
+    if not files:
+        return {"students": []}
+    
+    # Group by student
+    students_dict = {}
+    for f in files:
+        key = (f.student_name, f.student_urn)
+        if key not in students_dict:
+            students_dict[key] = []
+        students_dict[key].append(f)
+    
+    students = [
+        {
+            "student_name": name,
+            "student_urn": urn,
+            "file_count": len(files_list)
+        }
+        for (name, urn), files_list in students_dict.items()
+    ]
+    
+    return {"students": students}
+
+
+@router.get("/admin/files")
+def admin_get_files(
+    student_urn: str = Query(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Admin get all files for a student"""
+    user = get_auth_header(authorization)
+    
+    if user["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can access this endpoint"
+        )
+    
+    files = db.query(models.File).filter(
+        models.File.student_urn == student_urn
+    ).all()
+    
+    if not files:
+        return {
+            "student_urn": student_urn,
+            "files": []
+        }
+    
+    student = files[0]
+    
+    # Group by filename
+    files_dict = defaultdict(list)
+    for f in files:
+        files_dict[f.filename].append({
+            "id": f.id,
+            "version": f.version,
+            "comment": f.comment,
+            "uploaded_at": f.uploaded_at.isoformat() if f.uploaded_at else None
+        })
+    
+    # Sort versions
+    for filename in files_dict:
+        files_dict[filename].sort(key=lambda x: x["version"], reverse=True)
     
     return {
         "student_name": student.student_name,
         "student_urn": student.student_urn,
         "files": [{"filename": fn, "versions": v} for fn, v in files_dict.items()]
     }
+
+
+@router.get("/admin/download")
+def admin_download(
+    student_urn: str = Query(...),
+    filename: str = Query(...),
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    """Admin download latest file version"""
+    user = get_auth_header(authorization)
+    
+    if user["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can download files"
+        )
+    
+    file_record = db.query(models.File).filter(
+        models.File.filename == filename,
+        models.File.student_urn == student_urn
+    ).order_by(models.File.version.desc()).first()
+    
+    if not file_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+    
+    if not os.path.exists(file_record.filepath):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on disk"
+        )
+    
+    return FileResponse(
+        path=file_record.filepath,
+        filename=f"{file_record.student_name}_{filename}_v{file_record.version}"
+    )
+
+    
 
 
 @router.get("/download/latest/")

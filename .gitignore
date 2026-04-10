@@ -1,4 +1,6 @@
-# Python
+# ======================
+# 🐍 Python Backend
+# ======================
 __pycache__/
 *.pyc
 *.pyo
@@ -10,17 +12,31 @@ env/
 
 # Database
 *.db
+*.sqlite3
 
-# Uploads (optional but recommended)
+# Uploads (important - files stored here)
 uploads/
-
-# OS files
-.DS_Store
-
-# IDE
-.vscode/
-.idea/
 
 # Logs
 *.log
-code.json
+
+# Environment variables (VERY IMPORTANT 🔐)
+.env
+
+# ======================
+# ⚙️ IDE / OS
+# ======================
+.DS_Store
+.vscode/
+.idea/
+
+# ======================
+# 🌐 Frontend (Vue)
+# ======================
+node_modules/
+dist/
+
+# ======================
+# Misc
+# ======================
+*.swp
