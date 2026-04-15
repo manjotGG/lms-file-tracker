@@ -268,7 +268,7 @@ def admin_search(
 @router.get("/admin/files")
 def admin_get_files(
     student_urn: str = Query(...),
-    sort: str = Query("latest", regex="^(latest|oldest)$"),
+    sort: str = Query("latest", pattern="^(latest|oldest)$"),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
