@@ -18,24 +18,39 @@
                     <p>No files found</p>
                 </div>
                 
-                <div v-else class="files-list">
-                    <div 
-                        v-for="file in files" 
-                        :key="file.filename"
-                        class="file-item"
-                    >
-                        <div class="file-info">
-                            <h4>{{ file.filename }}</h4>
-                            <p class="version-count">{{ file.versions.length }} version(s)</p>
-                        </div>
-                        
-                        <button 
-                            class="btn btn-primary btn-sm"
-                            @click="downloadFile(file.filename)"
-                            :disabled="downloading"
+                <div v-else>
+                    <div class="sort-section">
+                        <label for="sort-dropdown">Sort by Upload Time:</label>
+                        <select 
+                            id="sort-dropdown"
+                            v-model="sortOrder" 
+                            class="sort-dropdown"
                         >
-                            Download Latest
-                        </button>
+                            <option value="latest">Latest First</option>
+                            <option value="oldest">Oldest First</option>
+                        </select>
+                    </div>
+                    
+                    <div class="files-list">
+                        <div 
+                            v-for="file in sortedFiles" 
+                            :key="file.filename"
+                            class="file-item"
+                        >
+                            <div class="file-info">
+                                <h4>{{ file.filename }}</h4>
+                                <p class="version-count">{{ file.versions.length }} version(s)</p>
+                                <p class="upload-time">{{ formatUploadTime(file.latest_upload) }}</p>
+                            </div>
+                            
+                            <button 
+                                class="btn btn-primary btn-sm"
+                                @click="downloadFile(file.filename)"
+                                :disabled="downloading"
+                            >
+                                Download Latest
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -44,7 +59,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '../services/api'
 
 export default {
@@ -58,6 +73,7 @@ export default {
         const files = ref([])
         const loading = ref(true)
         const downloading = ref(false)
+        const sortOrder = ref('latest')
         
         onMounted(() => {
             loadFiles()
@@ -68,11 +84,45 @@ export default {
             try {
                 const response = await api.getStudentFiles(props.student.student_urn)
                 files.value = response.data.files || []
+                // Add latest_upload field for each file
+                files.value.forEach(file => {
+                    if (file.versions && file.versions.length > 0) {
+                        file.latest_upload = file.versions[0].uploaded_at
+                    }
+                })
             } catch (error) {
                 console.error('Failed to load files', error)
             } finally {
                 loading.value = false
             }
+        }
+        
+        const sortedFiles = computed(() => {
+            let sorted = [...files.value]
+            
+            if (sortOrder.value === 'latest') {
+                // Latest First - Descending order
+                sorted.sort((a, b) => {
+                    const dateA = a.latest_upload ? new Date(a.latest_upload) : new Date(0)
+                    const dateB = b.latest_upload ? new Date(b.latest_upload) : new Date(0)
+                    return dateB - dateA
+                })
+            } else {
+                // Oldest First - Ascending order
+                sorted.sort((a, b) => {
+                    const dateA = a.latest_upload ? new Date(a.latest_upload) : new Date(0)
+                    const dateB = b.latest_upload ? new Date(b.latest_upload) : new Date(0)
+                    return dateA - dateB
+                })
+            }
+            
+            return sorted
+        })
+        
+        const formatUploadTime = (dateString) => {
+            if (!dateString) return ''
+            const date = new Date(dateString)
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
         
         const downloadFile = (filename) => {
@@ -83,6 +133,9 @@ export default {
             files,
             loading,
             downloading,
+            sortOrder,
+            sortedFiles,
+            formatUploadTime,
             downloadFile
         }
     }
@@ -182,6 +235,44 @@ export default {
     padding: 2rem;
 }
 
+.sort-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sort-section label {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.sort-dropdown {
+    padding: 0.5rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.4rem;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-weight: 500;
+}
+
+.sort-dropdown:hover {
+    border-color: var(--accent-color);
+}
+
+.sort-dropdown:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
 .loading, .empty {
     text-align: center;
     padding: 2rem 0;
@@ -226,6 +317,12 @@ export default {
     margin: 0;
     color: var(--text-secondary);
     font-size: 0.9rem;
+}
+
+.upload-time {
+    margin: 0.25rem 0 0 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
 }
 
 .btn {

@@ -299,7 +299,7 @@ uploads/
 ---
 
 ## 👥 Contributors
-Manjot Singh
+Manjot Singh,Manveer singh bhalla,Mannat kappor,Manas,mehak 
 
 ## 📄 License
 MIT License

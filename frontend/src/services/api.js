@@ -56,9 +56,9 @@ export default {
             params: { student_name, student_urn }
         }),
     
-    getStudentFiles: (student_urn) => 
+    getStudentFiles: (student_urn, sort = 'latest') => 
         api.get('/files/admin/files', {
-            params: { student_urn }
+            params: { student_urn, sort }
         }),
     
     adminDownload: (student_urn, filename) => 

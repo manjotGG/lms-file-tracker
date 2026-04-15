@@ -268,10 +268,11 @@ def admin_search(
 @router.get("/admin/files")
 def admin_get_files(
     student_urn: str = Query(...),
+    sort: str = Query("latest", regex="^(latest|oldest)$"),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Admin get all files for a student"""
+    """Admin get all files for a student with optional sorting"""
     user = get_auth_header(authorization)
     
     if user["role"] != "admin":
@@ -302,14 +303,31 @@ def admin_get_files(
             "uploaded_at": f.uploaded_at.isoformat() if f.uploaded_at else None
         })
     
-    # Sort versions
+    # Sort versions within each file
     for filename in files_dict:
         files_dict[filename].sort(key=lambda x: x["version"], reverse=True)
+    
+    # Create files list
+    files_list = [{"filename": fn, "versions": v} for fn, v in files_dict.items()]
+    
+    # Sort files by latest upload time
+    if sort == "latest":
+        # Latest First - Descending order
+        files_list.sort(
+            key=lambda f: f["versions"][0]["uploaded_at"] if f["versions"] else None,
+            reverse=True
+        )
+    else:  # sort == "oldest"
+        # Oldest First - Ascending order
+        files_list.sort(
+            key=lambda f: f["versions"][0]["uploaded_at"] if f["versions"] else None,
+            reverse=False
+        )
     
     return {
         "student_name": student.student_name,
         "student_urn": student.student_urn,
-        "files": [{"filename": fn, "versions": v} for fn, v in files_dict.items()]
+        "files": files_list
     }
 
 
