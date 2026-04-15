@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, Query, HTTPException, status, Header
+from fastapi import APIRouter, UploadFile, File, Depends, Query, HTTPException, status, Header, Form
 from fastapi.responses import FileResponse
 import shutil
 import os
@@ -67,7 +67,7 @@ def get_auth_header(authorization: str = Header(None)):
 @router.post("/upload")
 def upload_file(
     file: UploadFile = File(...),
-    comment: str = Query(""),
+    comment: str = Form(""),
     authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):

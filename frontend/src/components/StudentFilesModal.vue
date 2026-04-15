@@ -37,19 +37,38 @@
                             :key="file.filename"
                             class="file-item"
                         >
-                            <div class="file-info">
+                            <div class="file-header">
                                 <h4>{{ file.filename }}</h4>
-                                <p class="version-count">{{ file.versions.length }} version(s)</p>
-                                <p class="upload-time">{{ formatUploadTime(file.latest_upload) }}</p>
+                                <span class="version-count">{{ file.versions.length }} version(s)</span>
                             </div>
                             
-                            <button 
-                                class="btn btn-primary btn-sm"
-                                @click="downloadFile(file.filename)"
-                                :disabled="downloading"
-                            >
-                                Download Latest
-                            </button>
+                            <div class="versions-container">
+                                <div 
+                                    v-for="version in getSortedVersions(file.versions)" 
+                                    :key="version.id"
+                                    class="version-item"
+                                >
+                                    <div class="version-header">
+                                        <span class="version-number">v{{ version.version }}</span>
+                                        <span class="upload-date">{{ formatUploadTime(version.uploaded_at) }}</span>
+                                    </div>
+                                    
+                                    <div v-if="version.comment" class="comment-box">
+                                        <strong>Comment:</strong> {{ version.comment }}
+                                    </div>
+                                    <div v-else class="comment-box empty-comment">
+                                        <em>No comment</em>
+                                    </div>
+                                    
+                                    <button 
+                                        class="btn btn-primary btn-sm download-btn"
+                                        @click="$emit('download', student.student_urn, file.filename)"
+                                        :disabled="downloading"
+                                    >
+                                        Download v{{ version.version }}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -84,12 +103,6 @@ export default {
             try {
                 const response = await api.getStudentFiles(props.student.student_urn)
                 files.value = response.data.files || []
-                // Add latest_upload field for each file
-                files.value.forEach(file => {
-                    if (file.versions && file.versions.length > 0) {
-                        file.latest_upload = file.versions[0].uploaded_at
-                    }
-                })
             } catch (error) {
                 console.error('Failed to load files', error)
             } finally {
@@ -97,21 +110,40 @@ export default {
             }
         }
         
+        const getSortedVersions = (versions) => {
+            if (!versions) return []
+            let sorted = [...versions]
+            
+            if (sortOrder.value === 'latest') {
+                sorted.sort((a, b) => {
+                    const dateA = a.uploaded_at ? new Date(a.uploaded_at) : new Date(0)
+                    const dateB = b.uploaded_at ? new Date(b.uploaded_at) : new Date(0)
+                    return dateB - dateA
+                })
+            } else {
+                sorted.sort((a, b) => {
+                    const dateA = a.uploaded_at ? new Date(a.uploaded_at) : new Date(0)
+                    const dateB = b.uploaded_at ? new Date(b.uploaded_at) : new Date(0)
+                    return dateA - dateB
+                })
+            }
+            
+            return sorted
+        }
+        
         const sortedFiles = computed(() => {
             let sorted = [...files.value]
             
             if (sortOrder.value === 'latest') {
-                // Latest First - Descending order
                 sorted.sort((a, b) => {
-                    const dateA = a.latest_upload ? new Date(a.latest_upload) : new Date(0)
-                    const dateB = b.latest_upload ? new Date(b.latest_upload) : new Date(0)
+                    const dateA = a.versions && a.versions[0] ? new Date(a.versions[0].uploaded_at) : new Date(0)
+                    const dateB = b.versions && b.versions[0] ? new Date(b.versions[0].uploaded_at) : new Date(0)
                     return dateB - dateA
                 })
             } else {
-                // Oldest First - Ascending order
                 sorted.sort((a, b) => {
-                    const dateA = a.latest_upload ? new Date(a.latest_upload) : new Date(0)
-                    const dateB = b.latest_upload ? new Date(b.latest_upload) : new Date(0)
+                    const dateA = a.versions && a.versions[0] ? new Date(a.versions[0].uploaded_at) : new Date(0)
+                    const dateB = b.versions && b.versions[0] ? new Date(b.versions[0].uploaded_at) : new Date(0)
                     return dateA - dateB
                 })
             }
@@ -125,10 +157,6 @@ export default {
             return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
         
-        const downloadFile = (filename) => {
-            emit('download', props.student.student_urn, filename)
-        }
-        
         return {
             files,
             loading,
@@ -136,7 +164,7 @@ export default {
             sortOrder,
             sortedFiles,
             formatUploadTime,
-            downloadFile
+            getSortedVersions
         }
     }
 }
@@ -158,12 +186,8 @@ export default {
 }
 
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .modal {
@@ -171,7 +195,7 @@ export default {
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
     width: 90%;
-    max-width: 650px;
+    max-width: 700px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
@@ -198,8 +222,7 @@ export default {
 }
 
 .modal-header h3 {
-    margin: 0;
-    margin-bottom: 0.5rem;
+    margin: 0 0 0.5rem 0;
     text-transform: capitalize;
     color: var(--text-primary);
     font-weight: 700;
@@ -282,18 +305,14 @@ export default {
 .files-list {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 2rem;
 }
 
 .file-item {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    border-radius: 0.4rem;
-    padding: 1.25rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
     transition: border-color 0.2s ease;
 }
 
@@ -301,28 +320,110 @@ export default {
     border-color: var(--accent-color);
 }
 
-.file-info {
+.file-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.file-header h4 {
+    margin: 0;
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 1.05rem;
+    word-break: break-word;
     flex: 1;
 }
 
-.file-info h4 {
-    margin: 0;
-    margin-bottom: 0.25rem;
-    word-break: break-word;
-    color: var(--text-primary);
-    font-weight: 700;
-}
-
 .version-count {
-    margin: 0;
+    display: inline-block;
+    background: var(--bg-secondary);
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.3rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-left: 1rem;
+    white-space: nowrap;
 }
 
-.upload-time {
-    margin: 0.25rem 0 0 0;
+.versions-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.version-item {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.4rem;
+    padding: 1rem;
+    transition: all 0.2s ease;
+}
+
+.version-item:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.version-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.version-number {
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    background: var(--bg-tertiary);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.3rem;
+}
+
+.upload-date {
     color: var(--text-secondary);
     font-size: 0.85rem;
+    font-family: monospace;
+}
+
+.comment-box {
+    margin: 0.75rem 0;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 2px solid var(--accent-color);
+    border-radius: 0.3rem;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.comment-box strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.comment-box.empty-comment {
+    color: var(--text-secondary);
+    border-left-color: var(--border-color);
+    opacity: 0.7;
+    font-style: italic;
+}
+
+.download-btn {
+    align-self: flex-start;
+    margin-top: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.download-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
 }
 
 .btn {

@@ -1,0 +1,19 @@
+12:38:57 am [vite] Internal server error: Invalid end tag.
+  Plugin: vite:vue
+  File: /Users/manjotsingh/Downloads/New_/VC_Lms/frontend/src/components/StudentFilesModal.vue:79:21
+  77 |      </div>
+  78 |  </template>
+  79 |                      </div>
+     |                       ^
+  80 |                  </div>
+  81 |              </div>
+      at createCompilerError (/Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.js:1378:17)
+      at emitError (/Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.js:3014:5)
+      at Object.onclosetag (/Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.js:2391:9)
+      at Tokenizer.stateInClosingTagName (/Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.js:799:16)
+      at Tokenizer.parse (/Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.js:1157:16)
+      at Object.baseParse (/Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vue/compiler-core/dist/compiler-core.cjs.js:3053:13)
+      at Object.parse (/Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vue/compiler-dom/dist/compiler-dom.cjs.js:910:23)
+      at Object.parse$1 [as parse] (/Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vue/compiler-sfc/dist/compiler-sfc.cjs.js:1824:24)
+      at createDescriptor (file:///Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:74:43)
+      at transformMain (file:///Users/manjotsingh/Downloads/New_/VC_Lms/frontend/node_modules/@vitejs/plugin-vue/dist/index.mjs:2319:34) (x4)

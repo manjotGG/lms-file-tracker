@@ -7,7 +7,7 @@
                 <div class="backdrop"></div>
                 <div class="content">
                     <div class="logo">VC LMS</div>
-                    <h1>Select your Environment</h1>
+                    <h1>Select your Role</h1>
                     <p class="subtitle">Access the Version Control Learning Management System</p>
                     
                     <div class="role-buttons">
